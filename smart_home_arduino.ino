@@ -67,7 +67,7 @@ void loop() {
     // Update sensor readings
     updateSensorDisplay();
     
-    delay(500); // Small delay for readability
+    delay(1000); // Small delay for readability
 }
 
 void updateSensorDisplay() {
@@ -75,6 +75,10 @@ void updateSensorDisplay() {
     int tempValue = analogRead(TEMP_SENSOR_PIN);
     int ldrValue = analogRead(LDR_PIN);
     
+    // Convert the analog reading to voltage, and then to temperature
+    float voltage = tempValue * (5.0 / 1023.0); // Convert ADC value to voltage
+    float tempC = voltage * 100; // LM35: 10mV per degree Celsius
+
     // Clear the area before updating values
     lcd.fillRect(10, 10, 300, 150, BLACK);
     
@@ -85,9 +89,11 @@ void updateSensorDisplay() {
     
     lcd.gotoxy(10, 60);
     lcd.print("Temp: ");
-    lcd.print(tempValue);
+    lcd.print(tempC);
+    lcd.print(" C");
     
     lcd.gotoxy(10, 90);
     lcd.print("LDR: ");
     lcd.print(ldrValue);
 }
+
