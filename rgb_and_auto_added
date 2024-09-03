@@ -1,0 +1,152 @@
+#include "spiUnit.h"
+#include "TFT9341.h"
+#include "touch.h"
+
+#define FAN_PIN A3
+#define MOTION_PIN A4
+#define TEMP_SENSOR_PIN A7
+#define LDR_PIN A6
+#define RED_PIN 3
+#define GREEN_PIN 4
+#define BLUE_PIN 5
+
+enum FanState { OFF, ON, AUTOMATIC };
+FanState fanState = AUTOMATIC; // Fan starts in the AUTOMATIC state
+
+int tempOverCount = 0; // Count of consecutive temperature readings over 30°C
+int x, y;
+
+void setup() {
+    Serial.begin(9600);
+    pinMode(FAN_PIN, OUTPUT);
+    pinMode(MOTION_PIN, INPUT);
+    pinMode(TEMP_SENSOR_PIN, INPUT);
+    pinMode(LDR_PIN, INPUT);
+    
+    pinMode(RED_PIN, OUTPUT);
+    pinMode(GREEN_PIN, OUTPUT);
+    pinMode(BLUE_PIN, OUTPUT);
+    
+    lcd.begin();
+    lcdtouch.begin();
+    lcd.setRotation(2);
+    lcd.clrscr();
+    lcd.setFont(3);
+    
+    // Draw On/Off/Auto buttons
+    lcd.fillRoundRect(10, 180, 80, 50, 5, GREEN);
+    lcd.setColor(WHITE, GREEN);
+    lcd.gotoxy(35, 195);
+    lcd.print("ON");
+    
+    lcd.fillRoundRect(120, 180, 80, 50, 5, RED);
+    lcd.setColor(WHITE, RED);
+    lcd.gotoxy(135, 195);
+    lcd.print("OFF");
+    
+    lcd.fillRoundRect(230, 180, 80, 50, 5, BLUE);
+    lcd.setColor(WHITE, BLUE);
+    lcd.gotoxy(235, 195);
+    lcd.print("AUTO");
+    
+    // Initialize the display for sensor readings
+    updateSensorDisplay();
+}
+
+void loop() {
+    // Check for touch input
+    lcdtouch.readxy();
+    x = lcdtouch.readx();
+    y = lcdtouch.ready();
+    
+    // Print the coordinates to the Serial Monitor
+    Serial.print("Touched at X: ");
+    Serial.print(x);
+    Serial.print(", Y: ");
+    Serial.println(y);
+    
+    // Check if ON button is pressed
+    if (x > 10 && x < 90 && y > 180 && y < 230) {
+        fanState = ON;
+        digitalWrite(FAN_PIN, HIGH);
+        Serial.println("Fan ON (Manual)");
+    }
+    
+    // Check if OFF button is pressed
+    if (x > 120 && x < 200 && y > 180 && y < 230) {
+        fanState = OFF;
+        digitalWrite(FAN_PIN, LOW);
+        Serial.println("Fan OFF (Manual)");
+    }
+    
+    // Check if AUTO button is pressed
+    if (x > 230 && x < 310 && y > 180 && y < 230) {
+        fanState = AUTOMATIC;
+        Serial.println("Fan in AUTOMATIC mode");
+    }
+    
+    // Update sensor readings
+    updateSensorDisplay();
+}
+
+void updateSensorDisplay() {
+    int motionDetected = digitalRead(MOTION_PIN);
+    int tempValue = analogRead(TEMP_SENSOR_PIN);
+    delay(300); // Small delay for readability
+    int ldrValue = analogRead(LDR_PIN);
+    
+    // Convert the analog reading to voltage, and then to temperature
+    float voltage = tempValue * (5.0 / 1023.0); // Convert ADC value to voltage
+    float tempC = voltage * 100; // LM35: 10mV per degree Celsius
+
+    // Clear the area before updating values
+    lcd.fillRect(10, 10, 300, 150, BLACK);
+    
+    lcd.setColor(WHITE, BLACK);
+    lcd.gotoxy(20, 30);
+    lcd.print("Motion: ");
+    lcd.print(motionDetected ? "Detected" : "None");
+    
+    lcd.gotoxy(20, 60);
+    lcd.print("Temp: ");
+    lcd.print(tempC);
+    lcd.print(" C");
+    
+    lcd.gotoxy(20, 90);
+    lcd.print("LDR: ");
+    lcd.print(ldrValue);
+
+    // Handle fan control in AUTOMATIC mode
+    if (fanState == AUTOMATIC) {
+        if (tempC > 30) {
+            tempOverCount++;
+        } else {
+            tempOverCount = 0;
+        }
+
+        if (tempOverCount >= 3) {
+            digitalWrite(FAN_PIN, HIGH);
+            Serial.println("Fan ON (Automatic: 3+ consecutive readings > 30°C)");
+        } else if (tempOverCount < 3) {
+            digitalWrite(FAN_PIN, LOW);
+            Serial.println("Fan OFF (Automatic: Temperature <= 30°C)");
+        }
+    }
+
+    // Handle RGB LED behavior
+    if (motionDetected) {
+        // Police light effect: alternate between blue and red
+        digitalWrite(RED_PIN, LOW);
+        digitalWrite(GREEN_PIN, LOW);
+        digitalWrite(BLUE_PIN, HIGH);
+        delay(400);
+        digitalWrite(BLUE_PIN, LOW);
+        digitalWrite(RED_PIN, HIGH);
+        //delay(100);
+    } else {
+        // Green light on when no motion is detected
+        digitalWrite(RED_PIN, LOW);
+        digitalWrite(BLUE_PIN, LOW);
+        digitalWrite(GREEN_PIN, HIGH);
+    }
+}
