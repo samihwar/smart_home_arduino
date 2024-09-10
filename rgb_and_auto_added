@@ -13,13 +13,8 @@
 enum FanState { OFF, ON, AUTOMATIC };
 FanState fanState = AUTOMATIC; // Fan starts in the AUTOMATIC state
 
-enum LEDState { LED_OFF, LED_ON };
-LEDState ledState = LED_ON; // LED starts in ON mode
-
 int tempOverCount = 0; // Count of consecutive temperature readings over 30°C
 int x, y;
-bool motionDetected = false;
-bool lastMotionState = false;
 
 void setup() {
     Serial.begin(9600);
@@ -38,18 +33,7 @@ void setup() {
     lcd.clrscr();
     lcd.setFont(3);
     
-    // Draw On/Off buttons for LED at the top
-    lcd.fillRoundRect(10, 50, 80, 50, 5, YELLOW);
-    lcd.setColor(WHITE, YELLOW);
-    lcd.gotoxy(25, 65);
-    lcd.print("LED ON");
-    
-    lcd.fillRoundRect(120, 50, 80, 50, 5, GRAY);
-    lcd.setColor(WHITE, GRAY);
-    lcd.gotoxy(135, 65);
-    lcd.print("LED OFF");
-    
-    // Draw On/Off/Auto buttons for fan below the LED buttons
+    // Draw On/Off/Auto buttons
     lcd.fillRoundRect(10, 180, 80, 50, 5, GREEN);
     lcd.setColor(WHITE, GREEN);
     lcd.gotoxy(35, 195);
@@ -64,6 +48,9 @@ void setup() {
     lcd.setColor(WHITE, BLUE);
     lcd.gotoxy(235, 195);
     lcd.print("AUTO");
+    
+    // Initialize the display for sensor readings
+    updateSensorDisplay();
 }
 
 void loop() {
@@ -78,43 +65,58 @@ void loop() {
     Serial.print(", Y: ");
     Serial.println(y);
     
-    // Check if ON button for the fan is pressed
+    // Check if ON button is pressed
     if (x > 10 && x < 90 && y > 180 && y < 230) {
         fanState = ON;
         digitalWrite(FAN_PIN, HIGH);
         Serial.println("Fan ON (Manual)");
     }
     
-    // Check if OFF button for the fan is pressed
+    // Check if OFF button is pressed
     if (x > 120 && x < 200 && y > 180 && y < 230) {
         fanState = OFF;
         digitalWrite(FAN_PIN, LOW);
         Serial.println("Fan OFF (Manual)");
     }
     
-    // Check if AUTO button for the fan is pressed
+    // Check if AUTO button is pressed
     if (x > 230 && x < 310 && y > 180 && y < 230) {
         fanState = AUTOMATIC;
         Serial.println("Fan in AUTOMATIC mode");
     }
-
-    // Check if LED ON button is pressed
-    if (x > 10 && x < 90 && y > 50 && y < 100) {
-        ledState = LED_ON;
-        Serial.println("LED ON Mode");
-    }
     
-    // Check if LED OFF button is pressed
-    if (x > 120 && x < 200 && y > 50 && y < 100) {
-        ledState = LED_OFF;
-        Serial.println("LED OFF Mode");
-    }
+    // Update sensor readings
+    updateSensorDisplay();
+}
 
-    // Handle fan control in AUTOMATIC mode
+void updateSensorDisplay() {
+    int motionDetected = digitalRead(MOTION_PIN);
     int tempValue = analogRead(TEMP_SENSOR_PIN);
+    delay(300); // Small delay for readability
+    int ldrValue = analogRead(LDR_PIN);
+    
+    // Convert the analog reading to voltage, and then to temperature
     float voltage = tempValue * (5.0 / 1023.0); // Convert ADC value to voltage
     float tempC = voltage * 100; // LM35: 10mV per degree Celsius
 
+    // Clear the area before updating values
+    lcd.fillRect(10, 10, 300, 150, BLACK);
+    
+    lcd.setColor(WHITE, BLACK);
+    lcd.gotoxy(20, 30);
+    lcd.print("Motion: ");
+    lcd.print(motionDetected ? "Detected" : "None");
+    
+    lcd.gotoxy(20, 60);
+    lcd.print("Temp: ");
+    lcd.print(tempC);
+    lcd.print(" C");
+    
+    lcd.gotoxy(20, 90);
+    lcd.print("LDR: ");
+    lcd.print(ldrValue);
+
+    // Handle fan control in AUTOMATIC mode
     if (fanState == AUTOMATIC) {
         if (tempC > 30) {
             tempOverCount++;
@@ -131,46 +133,20 @@ void loop() {
         }
     }
 
-    // Handle RGB LED behavior based on LED state
-    int ldrValue = analogRead(LDR_PIN);
-    motionDetected = digitalRead(MOTION_PIN);
-
-    if (motionDetected != lastMotionState) {
-        if (motionDetected) {
-            Serial.println("Motion Detected!");
-        } else {
-            Serial.println("No Motion Detected");
-        }
-        lastMotionState = motionDetected;
-    }
-
-    if (ledState == LED_ON) {
-        if (motionDetected) {
-            // Police light effect: alternate between blue and red
-            digitalWrite(RED_PIN, LOW);
-            digitalWrite(GREEN_PIN, LOW);
-            digitalWrite(BLUE_PIN, HIGH);
-            delay(300);
-            digitalWrite(BLUE_PIN, LOW);
-            digitalWrite(RED_PIN, HIGH);
-            delay(300);
-        } else {
-            // Green light on when no motion is detected
-            digitalWrite(RED_PIN, LOW);
-            digitalWrite(BLUE_PIN, LOW);
-            digitalWrite(GREEN_PIN, HIGH);
-        }
-    } else if (ledState == LED_OFF) {
-        if (ldrValue < 200) {
-            // White light when LDR is under 200
-            digitalWrite(RED_PIN, HIGH);
-            digitalWrite(GREEN_PIN, HIGH);
-            digitalWrite(BLUE_PIN, HIGH);
-        } else {
-            // Turn off the LED
-            digitalWrite(RED_PIN, LOW);
-            digitalWrite(GREEN_PIN, LOW);
-            digitalWrite(BLUE_PIN, LOW);
-        }
+    // Handle RGB LED behavior
+    if (motionDetected) {
+        // Police light effect: alternate between blue and red
+        digitalWrite(RED_PIN, LOW);
+        digitalWrite(GREEN_PIN, LOW);
+        digitalWrite(BLUE_PIN, HIGH);
+        delay(400);
+        digitalWrite(BLUE_PIN, LOW);
+        digitalWrite(RED_PIN, HIGH);
+        //delay(100);
+    } else {
+        // Green light on when no motion is detected
+        digitalWrite(RED_PIN, LOW);
+        digitalWrite(BLUE_PIN, LOW);
+        digitalWrite(GREEN_PIN, HIGH);
     }
 }
